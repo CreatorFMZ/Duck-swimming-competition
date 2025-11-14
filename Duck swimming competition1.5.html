@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>鸭子游泳比赛</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root { --water:#b9ecff; --border:#077; --text:#044; --btn:#0aa; --btn2:#ff6b39; --btn3:#5c7cfa; }
+  *{box-sizing:border-box}
+  body{ margin:0; padding:12px; font-family:"Segoe UI","PingFang SC","Microsoft Yahei",system-ui,-apple-system,sans-serif;
+        background:linear-gradient(#eaf9ff,#d8f2ff); color:var(--text); }
+  h1{margin:6px 0 10px; text-align:center}
+  .panel{ max-width:1200px; margin:0 auto 10px; padding:10px; background:#fff; border:2px solid var(--border);
+          border-radius:12px; box-shadow:0 6px 18px rgba(0,0,0,.06); }
+  .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:center}
+  label{font-weight:600}
+  input[type=number]{ width:110px; padding:8px 10px; font-size:14px; border:2px solid var(--border); border-radius:8px; color:var(--text); }
+  button{ border:none; color:#fff; padding:10px 18px; font-size:16px; border-radius:10px; cursor:pointer;
+          box-shadow:0 4px 10px rgba(0,0,0,.08); }
+  #btnStart{ background:var(--btn2) }  #btnReset{ background:var(--btn) }
+  .badge{ background:#fff; border:1px solid var(--border); border-radius:10px; padding:6px 10px;
+          font-size:14px; box-shadow:0 4px 10px rgba(0,0,0,.06); }
+
+  #trackWrap{
+    position:relative; height:600px; overflow:hidden;
+    background: var(--water);
+    border:2px solid var(--border); border-radius:16px;
+  }
+  #finishLine{
+    position:absolute; top:0; width:10px; height:100%;
+    background:repeating-linear-gradient(180deg,#fff 0 10px,#ffca28 10px 20px);
+    right:90px; box-shadow:-2px 0 0 rgba(0,0,0,.1) inset;
+  }
+
+  .duck{
+    position:absolute; left:10px; width:64px; height:52px;
+    transform-origin:center; transition: transform .12s;
+    user-select:none; pointer-events:none;
+  }
+  .duck.finish{ transform: scale(1.06) }
+  .duck svg{ width:100%; height:100%; display:block; }
+
+  .label{
+    position:absolute; left:50%; transform:translate(-50%, -115%);
+    background:#ffffff; color:#333; border-radius:10px;
+    padding:2px 6px; font-size:12px; line-height:1;
+    box-shadow:0 1px 3px rgba(0,0,0,.15);
+    white-space:nowrap;
+  }
+
+  #hud{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:center; margin-top:6px }
+  #result ol{margin:6px 0 0 22px}
+  #result li{margin:2px 0; line-height:1.5}
+</style>
+</head>
+<body>
+  <h1>鸭子游泳比赛 🦆</h1>
+
+  <div class="panel">
+    <div class="row">
+      <label>鸭子数量：<input id="n" type="number" min="1" max="2147483648" value="1" /></label>
+      <label>速度倍数：<select id="speedMul">
+        <option value="0.5">0.5×</option>
+        <option value="1" selected>1×</option>
+        <option value="2">2×</option>
+        <option value="4">4×</option>
+      </select></label>
+      <button id="btnStart">开始比赛</button>
+      <button id="btnReset">重赛/清空</button>
+    </div>
+    <div id="hud">
+      <div class="badge">状态：<span id="status">等待开始</span></div>
+      <div class="badge">已完赛：<span id="doneCnt">0</span>/<span id="totalCnt">44</span></div>
+      <div class="badge">用时：<span id="elapsed">0.00s</span></div>
+    </div>
+  </div>
+
+  <div id="trackWrap" class="panel">
+    <div id="finishLine" title="终点"></div>
+  </div>
+
+  <div id="result" class="panel">
+    <h2>比赛结果</h2>
+    <ol id="rankList"></ol>
+  </div>
+
+<script>
+(function(){
+  // 运动参数 & 外观
+  const UNIT_TO_PX = 80;
+  const SPEED_MIN  = 0.6 * 2;  // 加速2倍
+  const SPEED_MAX  = 1.2 * 2;  // 加速2倍
+  const LEFT_PAD   = 10;
+  const FINISH_RIGHT_PADDING = 90;
+
+  // DOM
+  const elN = document.getElementById('n');
+  const elSpeedMul = document.getElementById('speedMul');
+  const btnStart = document.getElementById('btnStart');
+  const btnReset = document.getElementById('btnReset');
+  const wrap = document.getElementById('trackWrap');
+  const statusEl = document.getElementById('status');
+  const doneCntEl = document.getElementById('doneCnt');
+  const totalCntEl = document.getElementById('totalCnt');
+  const elapsedEl = document.getElementById('elapsed');
+  const rankList = document.getElementById('rankList');
+
+  // 状态
+  let ducks = [];       // {id, duckEl, labelEl, x, y, speed, finished, finishTime}
+  let running = false;
+  let startPerf = 0, lastPerf = 0;
+  let speedTimer = null, quackTimer = null, rafId = 0, finishX = 0;
+
+  // 音效（WebAudio 三连“嘎嘎嘎”）— 始终开启
+  let soundOn = true, audioCtx = null;
+  function initAudio(){
+    if (!audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AC();
+    }
+  }
+  function singleQuack(vol=0.28, dur=0.16, f0=520, f1=240){
+    if (!soundOn) return;
+    initAudio();
+    const ctx = audioCtx, now = ctx.currentTime;
+    const osc = ctx.createOscillator(); osc.type = 'triangle';
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(vol, now + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    osc.frequency.setValueAtTime(f0, now);
+    osc.frequency.exponentialRampToValueAtTime(f1, now + dur);
+    // noise
+    const noiseDur = Math.min(dur*0.55, 0.1);
+    const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate*noiseDur), ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i=0;i<data.length;i++) data[i] = (Math.random()*2-1)*0.55;
+    const noise = ctx.createBufferSource(); noise.buffer = buffer;
+    const band = ctx.createBiquadFilter(); band.type = 'bandpass'; band.frequency.value = 1200; band.Q.value = 1.1;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0.0001, now);
+    ng.gain.exponentialRampToValueAtTime(vol*0.6, now + 0.01);
+    ng.gain.exponentialRampToValueAtTime(0.0001, now + noiseDur);
+    // connect
+    osc.connect(g).connect(ctx.destination);
+    noise.connect(band).connect(ng).connect(ctx.destination);
+    // play
+    osc.start(now); osc.stop(now + dur + 0.02);
+    noise.start(now + 0.005); noise.stop(now + noiseDur + 0.01);
+  }
+  function quackTriple(){
+    const gap = 0.08;
+    singleQuack(0.28, 0.15, 520, 240);
+    setTimeout(()=>singleQuack(0.28, 0.14, 500, 230), gap*1000);
+    setTimeout(()=>singleQuack(0.30, 0.16, 540, 250), gap*2*1000);
+  }
+
+  // 造型
+  function colorByIndex(i,n){ const h=Math.round((360*i)/n); return `hsl(${h} 80% 55%)`; }
+  function cuteDuckSVG(bodyColor){
+    const wing = 'rgba(255,255,255,0.35)';
+    const stroke = 'rgba(0,0,0,0.15)';
+    return `
+    <svg viewBox="0 0 120 96" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        <radialGradient id="g1" cx="40%" cy="35%" r="80%">
+          <stop offset="0%" stop-color="white" stop-opacity="0.5"/>
+          <stop offset="100%" stop-color="${bodyColor}" stop-opacity="1"/>
+        </radialGradient>
+      </defs>
+      <path d="M22 66c0-18 18-30 42-30s42 12 42 30-18 26-42 26H38C29 92 22 85 22 76z"
+            fill="url(#g1)" stroke="${stroke}" stroke-width="2"/>
+      <circle cx="50" cy="34" r="18" fill="${bodyColor}" stroke="${stroke}" stroke-width="2"/>
+      <path d="M58 62c-8 0-14 6-14 12 0 5 5 10 12 10 9 0 17-8 20-14-5-5-10-8-18-8z"
+            fill="${wing}"/>
+      <path d="M60 36c10 0 18 3 22 7-4 4-12 7-22 7-5 0-9-5-9-7s4-7 9-7z" fill="#f6a21a" stroke="${stroke}" stroke-width="1.2"/>
+      <circle cx="56" cy="30" r="3.2" fill="#2b2b2b"/>
+      <circle cx="55" cy="29" r="1.1" fill="#fff"/>
+      <circle cx="46" cy="40" r="3.8" fill="#ff9fb1" opacity="0.45"/>
+    </svg>`;
+  }
+  function displayName(i){ return "#" + (i+1); }
+  function randSpeed(){ return SPEED_MIN + Math.random()*(SPEED_MAX - SPEED_MIN); }
+
+  function resetAll(clear=true){
+    cancelAnimationFrame(rafId);
+    if (speedTimer) clearInterval(speedTimer);
+    if (quackTimer) clearInterval(quackTimer);
+    running = false;
+    ducks = [];
+    startPerf = lastPerf = 0;
+    doneCntEl.textContent = '0';
+    elapsedEl.textContent = '0.00s';
+    statusEl.textContent = '等待开始';
+    rankList.innerHTML = '';
+    if (clear) wrap.querySelectorAll('.duck,.label').forEach(n=>n.remove());
+  }
+
+  function buildDucks(N){
+    finishX = wrap.clientWidth - FINISH_RIGHT_PADDING;
+    totalCntEl.textContent = String(N);
+    const H = wrap.clientHeight;
+    for(let i=0;i<N;i++){
+      const id = i+1;
+      const label = document.createElement('div');
+      label.className = 'label';
+      label.textContent = displayName(i);
+      wrap.appendChild(label);
+
+      const duck = document.createElement('div');
+      duck.className = 'duck';
+      duck.innerHTML = cuteDuckSVG(colorByIndex(i,N));
+      wrap.appendChild(duck);
+
+      const duckH = 52;
+      const y = Math.max(12, Math.min(H - duckH - 12, Math.random()*(H - duckH)));
+      duck.style.top = y + 'px';
+      duck.style.left = LEFT_PAD + 'px';
+      label.style.top = (y) + 'px';
+      label.style.left = (LEFT_PAD + 32) + 'px';
+
+      ducks.push({ id, duckEl: duck, labelEl: label, x: LEFT_PAD, y, speed: randSpeed(), finished:false, finishTime:null });
+    }
+  }
+
+  function startRace(){
+    if (running) return;
+    const N = Math.max(1, Math.min(65535, parseInt(elN.value||'44',10)));
+    const speedMultiplier = parseFloat(elSpeedMul.value);
+    resetAll(true);
+    buildDucks(N);
+    statusEl.textContent = '比赛中…';
+    running = true;
+    startPerf = lastPerf = performance.now();
+
+    // 开赛：随机 30% 三连嘎
+    ducks.forEach(()=>{ if (Math.random()<0.3) setTimeout(quackTriple, 80 + Math.random()*320); });
+
+    // 每秒刷新速度
+    speedTimer = setInterval(()=>{
+      ducks.forEach(d=>{ if(!d.finished) d.speed = randSpeed(); });
+    }, 1000);
+
+    // 比赛中：每 1s 有 40% 概率三连嘎一次
+    quackTimer = setInterval(()=>{
+      if (Math.random() < 0.4) quackTriple();
+    }, 1000);
+
+    const step = (now)=>{
+      rafId = requestAnimationFrame(step);
+      const dt = (now - lastPerf)/1000; lastPerf = now;
+      const elapsed = (now - startPerf)/1000; elapsedEl.textContent = elapsed.toFixed(2)+'s';
+
+      ducks.forEach(d=>{
+        if (d.finished) return;
+        d.x += d.speed * UNIT_TO_PX * dt * speedMultiplier;
+        if (d.x >= finishX){
+          d.x = finishX; d.finished = true; d.finishTime = elapsed; d.duckEl.classList.add('finish');
+          if (Math.random() < 0.6) quackTriple();
+        }
+        d.duckEl.style.left = d.x + 'px';
+        d.labelEl.style.left = (d.x + 32) + 'px';
+      });
+
+      const done = ducks.filter(d=>d.finished).length;
+      doneCntEl.textContent = String(done);
+      if (done === ducks.length){
+        running = false; statusEl.textContent = '已结束';
+        clearInterval(speedTimer); clearInterval(quackTimer); cancelAnimationFrame(rafId);
+        // 终点庆祝：三连嘎 * 3
+        setTimeout(quackTriple, 100);
+        setTimeout(quackTriple, 350);
+        setTimeout(quackTriple, 600);
+        showRanking();
+      }
+    };
+    requestAnimationFrame(step);
+  }
+
+  function showRanking(){
+    const sorted = [...ducks].sort((a,b)=>a.finishTime - b.finishTime);
+    rankList.innerHTML = '';
+    sorted.forEach((d, idx)=>{
+      const li = document.createElement('li');
+      li.textContent = `第 ${idx+1} 名：鸭子 #${d.id}（用时 ${d.finishTime.toFixed(2)} s）`;
+      rankList.appendChild(li);
+    });
+  }
+
+  // 事件
+  btnStart.addEventListener('click', ()=>{ initAudio(); startRace(); });
+  btnReset.addEventListener('click', ()=> resetAll(true));
+
+  // 初始化
+  totalCntEl.textContent = elN.value;
+  resetAll(true);
+})();
+</script>
+</body>
+</html>
