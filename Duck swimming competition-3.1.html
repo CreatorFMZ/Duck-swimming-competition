@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>鸭子游泳比赛</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root { --water:#b9ecff; --border:#077; --text:#044; --btn:#0aa; --btn2:#ff6b39; --btn3:#5c7cfa; }
+  *{box-sizing:border-box}
+  body{ margin:0; padding:12px; font-family:"Segoe UI","PingFang SC","Microsoft Yahei",system-ui,-apple-system,sans-serif;
+        background:linear-gradient(#eaf9ff,#d8f2ff); color:var(--text); }
+  h1{margin:6px 0 10px; text-align:center}
+  .panel{ max-width:1200px; margin:0 auto 10px; padding:10px; background:#fff; border:2px solid var(--border);
+          border-radius:12px; box-shadow:0 6px 18px rgba(0,0,0,.06); }
+  .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:center}
+  label{font-weight:600}
+  input[type=number]{ width:110px; padding:8px 10px; font-size:14px; border:2px solid var(--border); border-radius:8px; color:var(--text); }
+  button{ border:none; color:#fff; padding:10px 18px; font-size:16px; border-radius:10px; cursor:pointer;
+          box-shadow:0 4px 10px rgba(0,0,0,.08); }
+  #btnStart{ background:var(--btn2) }  #btnReset{ background:var(--btn) }  #btnSettings{ background:var(--btn3) }
+  .badge{ background:#fff; border:1px solid var(--border); border-radius:10px; padding:6px 10px;
+          font-size:14px; box-shadow:0 4px 10px rgba(0,0,0,.06); }
+
+  #trackWrap{
+    position:relative; height:600px; overflow:hidden;
+    background: var(--water);
+    border:2px solid var(--border); border-radius:16px;
+  }
+  #finishLine{
+    position:absolute; top:0; width:10px; height:100%;
+    background:repeating-linear-gradient(180deg,#fff 0 10px,#ffca28 10px 20px);
+    right:90px; box-shadow:-2px 0 0 rgba(0,0,0,.1) inset;
+  }
+
+  .duck{
+    position:absolute; left:10px; width:64px; height:52px;
+    transform-origin:center; 
+    transition: transform .12s, opacity 0.3s ease-in-out;
+    user-select:none; pointer-events:none;
+    opacity: 1;
+  }
+  .duck.finish{ transform: scale(1.06) }
+  .duck.hiding { opacity: 0; }
+  .duck svg{ width:100%; height:100%; display:block; }
+
+  .label{
+    position:absolute; left:50%; transform:translate(-50%, -115%);
+    background:#ffffff; color:#333; border-radius:10px;
+    padding:2px 6px; font-size:12px; line-height:1;
+    box-shadow:0 1px 3px rgba(0,0,0,.15);
+    white-space:nowrap;
+    transition: opacity 0.3s ease-in-out;
+    opacity: 1;
+  }
+  .label.hiding { opacity: 0; }
+
+  #hud{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:center; margin-top:6px }
+  #result ol{margin:6px 0 0 22px}
+  #result li{margin:2px 0; line-height:1.5}
+  
+  /* 冠军弹窗样式 */
+  .winner-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+  }
+  .winner-content {
+    background: white;
+    padding: 30px;
+    border-radius: 15px;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    max-width: 400px;
+    width: 90%;
+    border: 3px solid #ffca28;
+  }
+  .winner-title {
+    font-size: 24px;
+    font-weight: bold;
+    color: #ff6b39;
+    margin-bottom: 15px;
+  }
+  .winner-info {
+    font-size: 18px;
+    margin-bottom: 20px;
+    color: #333;
+  }
+  .winner-time {
+    font-size: 22px;
+    font-weight: bold;
+    color: #077;
+    margin: 10px 0;
+  }
+  .close-winner {
+    background: var(--btn);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 16px;
+    cursor: pointer;
+    margin-top: 10px;
+  }
+  
+  /* 设置弹窗样式 */
+  .settings-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+  }
+  .settings-content {
+    background: white;
+    padding: 25px;
+    border-radius: 15px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    max-width: 450px;
+    width: 90%;
+    border: 3px solid var(--btn3);
+  }
+  .settings-title {
+    font-size: 22px;
+    font-weight: bold;
+    color: var(--btn3);
+    margin-bottom: 20px;
+    text-align: center;
+  }
+  .settings-group {
+    margin-bottom: 20px;
+  }
+  .settings-label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #333;
+  }
+  .settings-select, .settings-checkbox {
+    width: 100%;
+    padding: 8px 10px;
+    font-size: 14px;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    margin-bottom: 10px;
+  }
+  .settings-checkbox {
+    width: auto;
+    margin-right: 8px;
+  }
+  .checkbox-container {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .settings-footer {
+    margin-top: 25px;
+    padding-top: 15px;
+    border-top: 1px solid #eee;
+    text-align: center;
+  }
+  .github-link {
+    color: var(--btn);
+    text-decoration: none;
+    font-size: 14px;
+  }
+  .github-link:hover {
+    text-decoration: underline;
+  }
+  .close-settings {
+    background: var(--btn);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 16px;
+    cursor: pointer;
+    margin-top: 10px;
+    width: 100%;
+  }
+</style>
+</head>
+<body>
+  <h1 id="pageTitle">鸭子游泳比赛 🦆</h1>
+
+  <div class="panel">
+    <div class="row">
+      <label id="duckCountLabel">鸭子数量：<input id="n" type="number" min="1" max="2147483648" value="5" /></label>
+      <label id="speedMultiplierLabel">速度倍数：<input id="speedMul" type="number" min="0.01" max="100" step="0.01" value="1" /></label>
+      <button id="btnStart">开始比赛</button>
+      <button id="btnReset">清空</button>
+      <button id="btnSettings">设置</button>
+    </div>
+    <div id="hud">
+      <div class="badge" id="statusLabel">状态：<span id="status">等待开始</span></div>
+      <div class="badge" id="finishedLabel">已完赛：<span id="doneCnt">0</span>/<span id="totalCnt">5</span></div>
+      <div class="badge" id="timeUsedLabel">用时：<span id="elapsed">0.0000s</span></div>
+    </div>
+  </div>
+
+  <div id="trackWrap" class="panel">
+    <div id="finishLine" title="终点"></div>
+  </div>
+
+  <div id="result" class="panel">
+    <h2 id="raceResultTitle">比赛结果</h2>
+    <ol id="rankList"></ol>
+  </div>
+
+<script>
+(function(){
+  // 运动参数 & 外观
+  const UNIT_TO_PX = 80;
+  // 增加速度差：将速度范围从原来的1.2-2.4扩展到0.3-3.0
+  const SPEED_MIN  = 0.3;  // 原来为0.6*2=1.2
+  const SPEED_MAX  = 3.0;  // 原来为1.2*2=2.4
+  const LEFT_PAD   = 10;
+  const FINISH_RIGHT_PADDING = 90;
+  
+  // 设置
+  let settings = {
+    language: 'zh',
+    showWinnerModal: true,
+    soundOn: true
+  };
+  
+  // 多语言支持
+  const translations = {
+    zh: {
+      title: "鸭子游泳比赛 🦆",
+      duckCount: "鸭子数量：",
+      speedMultiplier: "速度倍数：",
+      startRace: "开始比赛",
+      reset: "清空",
+      settings: "设置",
+      status: "状态：",
+      finished: "已完赛：",
+      timeUsed: "用时：",
+      raceResult: "比赛结果",
+      waiting: "等待开始",
+      racing: "比赛中…",
+      ended: "已结束",
+      settingsTitle: "设置",
+      language: "语言",
+      showWinner: "显示冠军弹窗",
+      sound: "开启声音",
+      saveSettings: "保存设置",
+      github: "转到https://github.com/CreatorFMZ/Duck-swimming-competition以获取最新版"
+    },
+    en: {
+      title: "Duck Swimming Competition 🦆",
+      duckCount: "Duck Count:",
+      speedMultiplier: "Speed Multiplier:",
+      startRace: "Start Race",
+      reset: "Reset",
+      settings: "Settings",
+      status: "Status:",
+      finished: "Finished:",
+      timeUsed: "Time:",
+      raceResult: "Race Results",
+      waiting: "Waiting",
+      racing: "Racing...",
+      ended: "Ended",
+      settingsTitle: "Settings",
+      language: "Language",
+      showWinner: "Show Winner Popup",
+      sound: "Enable Sound",
+      saveSettings: "Save Settings",
+      github: "Go to https://github.com/CreatorFMZ/Duck-swimming-competition for the latest version"
+    }
+  };
+
+  // 状态
+  let ducks = [];       // {id, duckEl, labelEl, x, y, speed, finished, finishTime}
+  let running = false;
+  let startPerf = 0, lastPerf = 0;
+  let speedTimer = null, quackTimer = null, rafId = 0, finishX = 0;
+
+  // 音效（WebAudio 三连"嘎嘎嘎"）
+  let audioCtx = null;
+  function initAudio(){
+    if (!audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AC();
+    }
+  }
+  function singleQuack(vol=0.28, dur=0.16, f0=520, f1=240){
+    if (!settings.soundOn) return;
+    initAudio();
+    const ctx = audioCtx, now = ctx.currentTime;
+    const osc = ctx.createOscillator(); osc.type = 'triangle';
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(vol, now + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    osc.frequency.setValueAtTime(f0, now);
+    osc.frequency.exponentialRampToValueAtTime(f1, now + dur);
+    // noise
+    const noiseDur = Math.min(dur*0.55, 0.1);
+    const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate*noiseDur), ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i=0;i<data.length;i++) data[i] = (Math.random()*2-1)*0.55;
+    const noise = ctx.createBufferSource(); noise.buffer = buffer;
+    const band = ctx.createBiquadFilter(); band.type = 'bandpass'; band.frequency.value = 1200; band.Q.value = 1.1;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0.0001, now);
+    ng.gain.exponentialRampToValueAtTime(vol*0.6, now + 0.01);
+    ng.gain.exponentialRampToValueAtTime(0.0001, now + noiseDur);
+    // connect
+    osc.connect(g).connect(ctx.destination);
+    noise.connect(band).connect(ng).connect(ctx.destination);
+    // play
+    osc.start(now); osc.stop(now + dur + 0.02);
+    noise.start(now + 0.005); noise.stop(now + noiseDur + 0.01);
+  }
+  function quackTriple(){
+    const gap = 0.08;
+    singleQuack(0.28, 0.15, 520, 240);
+    setTimeout(()=>singleQuack(0.28, 0.14, 500, 230), gap*1000);
+    setTimeout(()=>singleQuack(0.30, 0.16, 540, 250), gap*2*1000);
+  }
+
+  // 造型
+  function colorByIndex(i,n){ const h=Math.round((360*i)/n); return `hsl(${h} 80% 55%)`; }
+  function cuteDuckSVG(bodyColor){
+    const wing = 'rgba(255,255,255,0.35)';
+    const stroke = 'rgba(0,0,0,0.15)';
+    return `
+    <svg viewBox="0 0 120 96" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        <radialGradient id="g1" cx="40%" cy="35%" r="80%">
+          <stop offset="0%" stop-color="white" stop-opacity="0.5"/>
+          <stop offset="100%" stop-color="${bodyColor}" stop-opacity="1"/>
+        </radialGradient>
+      </defs>
+      <path d="M22 66c0-18 18-30 42-30s42 12 42 30-18 26-42 26H38C29 92 22 85 22 76z"
+            fill="url(#g1)" stroke="${stroke}" stroke-width="2"/>
+      <circle cx="50" cy="34" r="18" fill="${bodyColor}" stroke="${stroke}" stroke-width="2"/>
+      <path d="M58 62c-8 0-14 6-14 12 0 5 5 10 12 10 9 0 17-8 20-14-5-5-10-8-18-8z"
+            fill="${wing}"/>
+      <path d="M60 36c10 0 18 3 22 7-4 4-12 7-22 7-5 0-9-5-9-7s4-7 9-7z" fill="#f6a21a" stroke="${stroke}" stroke-width="1.2"/>
+      <circle cx="56" cy="30" r="3.2" fill="#2b2b2b"/>
+      <circle cx="55" cy="29" r="1.1" fill="#fff"/>
+      <circle cx="46" cy="40" r="3.8" fill="#ff9fb1" opacity="0.45"/>
+    </svg>`;
+  }
+  function displayName(i){ return "#" + (i+1); }
+  function randSpeed(){ 
+    // 使用指数分布来增加速度差异
+    const exponent = 2.5; // 指数值越大，速度差异越大
+    const normalized = Math.pow(Math.random(), exponent);
+    return SPEED_MIN + normalized * (SPEED_MAX - SPEED_MIN);
+  }
+
+  // 显示冠军弹窗
+  function showWinnerModal(winner) {
+    if (!settings.showWinnerModal) return;
+    
+    const modal = document.createElement('div');
+    modal.className = 'winner-modal';
+    const isChinese = settings.language === 'zh';
+    
+    modal.innerHTML = `
+      <div class="winner-content">
+        <div class="winner-title">🏆 ${isChinese ? '冠军诞生！' : 'Winner!'} 🏆</div>
+        <div class="winner-info">${isChinese ? '冠军是：' : 'Winner: '}<strong>${isChinese ? '鸭子' : 'Duck'} ${displayName(winner.id-1)}</strong></div>
+        <div class="winner-time">${isChinese ? '用时：' : 'Time: '}${winner.finishTime.toFixed(4)} ${isChinese ? '秒' : 's'}</div>
+        <button class="close-winner">${isChinese ? '恭喜冠军！' : 'Congratulations!'}</button>
+      </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // 点击关闭弹窗
+    modal.querySelector('.close-winner').addEventListener('click', () => {
+      document.body.removeChild(modal);
+    });
+    
+    // 点击背景也可以关闭
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        document.body.removeChild(modal);
+      }
+    });
+  }
+  
+  // 显示设置弹窗
+  function showSettingsModal() {
+    const modal = document.createElement('div');
+    modal.className = 'settings-modal';
+    const isChinese = settings.language === 'zh';
+    
+    modal.innerHTML = `
+      <div class="settings-content">
+        <div class="settings-title">${isChinese ? '设置' : 'Settings'}</div>
+        
+        <div class="settings-group">
+          <label class="settings-label">${isChinese ? '语言' : 'Language'}</label>
+          <select class="settings-select" id="settingLanguage">
+            <option value="zh" ${settings.language === 'zh' ? 'selected' : ''}>中文</option>
+            <option value="en" ${settings.language === 'en' ? 'selected' : ''}>English</option>
+          </select>
+        </div>
+        
+        <div class="settings-group">
+          <div class="checkbox-container">
+            <input type="checkbox" class="settings-checkbox" id="settingShowWinner" ${settings.showWinnerModal ? 'checked' : ''}>
+            <label for="settingShowWinner">${isChinese ? '显示冠军弹窗' : 'Show Winner Popup'}</label>
+          </div>
+          
+          <div class="checkbox-container">
+            <input type="checkbox" class="settings-checkbox" id="settingSound" ${settings.soundOn ? 'checked' : ''}>
+            <label for="settingSound">${isChinese ? '开启声音' : 'Enable Sound'}</label>
+          </div>
+        </div>
+        
+        <div class="settings-footer">
+          <a href="https://github.com/CreatorFMZ/Duck-swimming-competition" target="_blank" class="github-link">${isChinese ? '转到https://github.com/CreatorFMZ/Duck-swimming-competition以获取最新版' : 'Go to https://github.com/CreatorFMZ/Duck-swimming-competition for the latest version'}</a>
+        </div>
+        
+        <button class="close-settings">${isChinese ? '保存设置' : 'Save Settings'}</button>
+      </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // 点击保存设置
+    modal.querySelector('.close-settings').addEventListener('click', () => {
+      settings.language = document.getElementById('settingLanguage').value;
+      settings.showWinnerModal = document.getElementById('settingShowWinner').checked;
+      settings.soundOn = document.getElementById('settingSound').checked;
+      
+      saveSettings();
+      updateLanguage();
+      document.body.removeChild(modal);
+    });
+    
+    // 点击背景也可以关闭
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        document.body.removeChild(modal);
+      }
+    });
+  }
+  
+  // 保存设置到localStorage
+  function saveSettings() {
+    localStorage.setItem('duckRaceSettings', JSON.stringify(settings));
+  }
+  
+  // 加载设置
+  function loadSettings() {
+    const saved = localStorage.getItem('duckRaceSettings');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      settings.language = parsed.language || 'zh';
+      settings.showWinnerModal = parsed.showWinnerModal !== undefined ? parsed.showWinnerModal : true;
+      settings.soundOn = parsed.soundOn !== undefined ? parsed.soundOn : true;
+    }
+  }
+  
+  // 更新页面语言
+  function updateLanguage() {
+    const lang = settings.language;
+    const t = translations[lang];
+    
+    // 更新所有界面元素
+    document.getElementById('pageTitle').textContent = t.title;
+    document.getElementById('duckCountLabel').innerHTML = t.duckCount + '<input id="n" type="number" min="1" max="2147483648" value="5" />';
+    document.getElementById('speedMultiplierLabel').innerHTML = t.speedMultiplier + '<input id="speedMul" type="number" min="0.01" max="100" step="0.01" value="1" />';
+    document.getElementById('btnStart').textContent = t.startRace;
+    document.getElementById('btnReset').textContent = t.reset;
+    document.getElementById('btnSettings').textContent = t.settings;
+    document.getElementById('statusLabel').innerHTML = t.status + '<span id="status">等待开始</span>';
+    document.getElementById('finishedLabel').innerHTML = t.finished + '<span id="doneCnt">0</span>/<span id="totalCnt">5</span>';
+    document.getElementById('timeUsedLabel').innerHTML = t.timeUsed + '<span id="elapsed">0.0000s</span>';
+    document.getElementById('raceResultTitle').textContent = t.raceResult;
+    
+    // 重新绑定事件
+    setupEventListeners();
+  }
+  
+  // 更新总鸭子数量显示
+  function updateTotalCount() {
+    document.getElementById('totalCnt').textContent = document.getElementById('n').value;
+  }
+  
+  // 验证速度倍数输入
+  function validateSpeedMultiplier() {
+    const elSpeedMul = document.getElementById('speedMul');
+    let value = parseFloat(elSpeedMul.value);
+    if (isNaN(value) || value < 0.01) {
+      elSpeedMul.value = 0.01;
+    } else if (value > 100) {
+      elSpeedMul.value = 100;
+    }
+  }
+
+  function resetAll(clear=true){
+    cancelAnimationFrame(rafId);
+    if (speedTimer) clearInterval(speedTimer);
+    if (quackTimer) clearInterval(quackTimer);
+    running = false;
+    ducks = [];
+    startPerf = lastPerf = 0;
+    document.getElementById('doneCnt').textContent = '0';
+    document.getElementById('elapsed').textContent = '0.0000s';
+    document.getElementById('status').textContent = translations[settings.language].waiting;
+    document.getElementById('rankList').innerHTML = '';
+    if (clear) {
+      const wrap = document.getElementById('trackWrap');
+      wrap.querySelectorAll('.duck,.label').forEach(n=>n.remove());
+    }
+  }
+
+  function buildDucks(N){
+    const wrap = document.getElementById('trackWrap');
+    finishX = wrap.clientWidth - FINISH_RIGHT_PADDING;
+    document.getElementById('totalCnt').textContent = String(N);
+    const H = wrap.clientHeight;
+    for(let i=0;i<N;i++){
+      const id = i+1;
+      const label = document.createElement('div');
+      label.className = 'label';
+      label.textContent = displayName(i);
+      wrap.appendChild(label);
+
+      const duck = document.createElement('div');
+      duck.className = 'duck';
+      duck.innerHTML = cuteDuckSVG(colorByIndex(i,N));
+      wrap.appendChild(duck);
+
+      const duckH = 52;
+      const y = Math.max(12, Math.min(H - duckH - 12, Math.random()*(H - duckH)));
+      duck.style.top = y + 'px';
+      duck.style.left = LEFT_PAD + 'px';
+      label.style.top = (y) + 'px';
+      label.style.left = (LEFT_PAD + 32) + 'px';
+
+      ducks.push({ id, duckEl: duck, labelEl: label, x: LEFT_PAD, y, speed: randSpeed(), finished:false, finishTime:null });
+    }
+  }
+
+  function startRace(){
+    if (running) return;
+    const N = Math.max(1, Math.min(65535, parseInt(document.getElementById('n').value||'5',10)));
+    const speedMultiplier = parseFloat(document.getElementById('speedMul').value);
+    resetAll(true);
+    buildDucks(N);
+    document.getElementById('status').textContent = translations[settings.language].racing;
+    running = true;
+    startPerf = lastPerf = performance.now();
+
+    // 开赛：随机 30% 三连嘎
+    ducks.forEach(()=>{ if (Math.random()<0.3) setTimeout(quackTriple, 80 + Math.random()*320); });
+
+    // 每秒刷新速度
+    speedTimer = setInterval(()=>{
+      ducks.forEach(d=>{ if(!d.finished) d.speed = randSpeed(); });
+    }, 1000);
+
+    // 比赛中：每 1s 有 40% 概率三连嘎一次
+    quackTimer = setInterval(()=>{
+      if (Math.random() < 0.4) quackTriple();
+    }, 1000);
+
+    const step = (now)=>{
+      rafId = requestAnimationFrame(step);
+      const dt = (now - lastPerf)/1000; lastPerf = now;
+      const elapsed = (now - startPerf)/1000; 
+      document.getElementById('elapsed').textContent = elapsed.toFixed(4)+'s';
+
+      ducks.forEach(d=>{
+        if (d.finished) return;
+        d.x += d.speed * UNIT_TO_PX * dt * speedMultiplier;
+        if (d.x >= finishX){
+          d.x = finishX; 
+          d.finished = true; 
+          d.finishTime = elapsed; 
+          d.duckEl.classList.add('finish');
+          
+          // 0.3秒内逐渐隐藏
+          setTimeout(() => {
+            d.duckEl.classList.add('hiding');
+            d.labelEl.classList.add('hiding');
+          }, 100);
+          
+          // 0.35秒后完全移除DOM元素
+          setTimeout(() => {
+            if (d.duckEl.parentNode) d.duckEl.remove();
+            if (d.labelEl.parentNode) d.labelEl.remove();
+          }, 350);
+          
+          if (Math.random() < 0.6) quackTriple();
+        }
+        d.duckEl.style.left = d.x + 'px';
+        d.labelEl.style.left = (d.x + 32) + 'px';
+      });
+
+      const done = ducks.filter(d=>d.finished).length;
+      document.getElementById('doneCnt').textContent = String(done);
+      if (done === ducks.length){
+        running = false; 
+        document.getElementById('status').textContent = translations[settings.language].ended;
+        clearInterval(speedTimer); 
+        clearInterval(quackTimer); 
+        cancelAnimationFrame(rafId);
+        
+        // 终点庆祝：三连嘎 * 3
+        setTimeout(quackTriple, 100);
+        setTimeout(quackTriple, 350);
+        setTimeout(quackTriple, 600);
+        
+        // 显示排名
+        showRanking();
+        
+        // 显示冠军弹窗
+        const sorted = [...ducks].sort((a,b)=>a.finishTime - b.finishTime);
+        if (sorted.length > 0) {
+          setTimeout(() => showWinnerModal(sorted[0]), 800);
+        }
+      }
+    };
+    requestAnimationFrame(step);
+  }
+
+  function showRanking(){
+    const sorted = [...ducks].sort((a,b)=>a.finishTime - b.finishTime);
+    const rankList = document.getElementById('rankList');
+    rankList.innerHTML = '';
+    const isChinese = settings.language === 'zh';
+    
+    sorted.forEach((d, idx)=>{
+      const li = document.createElement('li');
+      li.textContent = `${isChinese ? '第' : ''} ${idx+1} ${isChinese ? '名：鸭子' : 'Place: Duck'} #${d.id}（${isChinese ? '用时' : 'Time'} ${d.finishTime.toFixed(4)} s）`;
+      rankList.appendChild(li);
+    });
+  }
+
+  // 事件监听器
+  function setupEventListeners() {
+    // 清除现有事件监听器
+    const btnStart = document.getElementById('btnStart');
+    const btnReset = document.getElementById('btnReset');
+    const btnSettings = document.getElementById('btnSettings');
+    const elN = document.getElementById('n');
+    const elSpeedMul = document.getElementById('speedMul');
+    
+    // 克隆并替换元素以移除旧的事件监听器
+    const newBtnStart = btnStart.cloneNode(true);
+    const newBtnReset = btnReset.cloneNode(true);
+    const newBtnSettings = btnSettings.cloneNode(true);
+    const newElN = elN.cloneNode(true);
+    const newElSpeedMul = elSpeedMul.cloneNode(true);
+    
+    btnStart.parentNode.replaceChild(newBtnStart, btnStart);
+    btnReset.parentNode.replaceChild(newBtnReset, btnReset);
+    btnSettings.parentNode.replaceChild(newBtnSettings, btnSettings);
+    elN.parentNode.replaceChild(newElN, elN);
+    elSpeedMul.parentNode.replaceChild(newElSpeedMul, elSpeedMul);
+    
+    // 添加新的事件监听器
+    newBtnStart.addEventListener('click', ()=>{ initAudio(); startRace(); });
+    newBtnReset.addEventListener('click', ()=> resetAll(true));
+    newBtnSettings.addEventListener('click', showSettingsModal);
+    newElN.addEventListener('input', updateTotalCount);
+    newElSpeedMul.addEventListener('input', validateSpeedMultiplier);
+  }
+
+  // 初始化
+  function init() {
+    loadSettings();
+    updateLanguage();
+    document.getElementById('totalCnt').textContent = document.getElementById('n').value;
+    resetAll(true);
+  }
+
+  // 启动应用
+  init();
+})();
+</script>
+</body>
+</html>
